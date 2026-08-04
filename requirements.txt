@@ -7,3 +7,4 @@ pydantic[email]
 aiosqlite
 PyJWT
 websockets
+python-multipart
