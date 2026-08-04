@@ -6,7 +6,6 @@ async def init_db():
         await db.execute("PRAGMA journal_mode=WAL;")
         await db.execute("PRAGMA foreign_keys = ON;")
 
-        # Users Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,7 +15,6 @@ async def init_db():
             )
         """)
 
-        # Connections Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +29,6 @@ async def init_db():
             )
         """)
 
-        # Messages Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

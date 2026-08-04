@@ -15,7 +15,6 @@ password_hash = PasswordHash((BcryptHasher(),))
 
 @router.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
-    # 1. Authenticate via cookie
     token = websocket.cookies.get(COOKIE_NAME)
     user_payload = decode_jwt(token) if token else None
     
@@ -57,14 +56,12 @@ async def websocket_chat(websocket: WebSocket):
             try:
                 message_data = MessageCreate(**payload)
             except ValidationError as e:
-                # Sends clear, structured error logs back to the client UI
                 await websocket.send_json({"error": "Validation failed", "details": e.errors()})
                 continue
             
             async with aiosqlite.connect(DB_FILE_NAME) as db:
                 db.row_factory = aiosqlite.Row
                 
-                # Check if target user exists
                 async with db.execute("SELECT id FROM users WHERE id = ?", (target_id,)) as cursor:
                     target = await cursor.fetchone()
                 if not target:

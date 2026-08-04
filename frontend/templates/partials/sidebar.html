@@ -1,0 +1,11 @@
+<aside class="sidebar" aria-label="Primary navigation">
+  <a class="brand" href="/" aria-label="{{ app_name }} home"><span class="brand-mark">{{ app_name[0]|upper }}</span><span class="brand-name">{{ app_name }}</span></a>
+  <nav class="side-nav">
+    <a class="nav-link {% if current_page == 'home' %}active{% endif %}" href="/"><span class="nav-icon">⌂</span><span>Home</span></a>
+    <a class="nav-link {% if current_page == 'search' %}active{% endif %}" href="/search"><span class="nav-icon">⌕</span><span>Search</span></a>
+    <a class="nav-link {% if current_page == 'messages' %}active{% endif %}" href="/messages"><span class="nav-icon">◌</span><span>Messages</span></a>
+    <a class="nav-link {% if current_page == 'notifications' %}active{% endif %}" href="/notifications"><span class="nav-icon">♢</span><span>Notifications</span><i class="nav-badge" id="request-count" hidden>0</i></a>
+    <a class="nav-link {% if current_page == 'profile' %}active{% endif %}" href="/profile/{{ username }}"><span class="avatar avatar-xs">{{ username[0]|upper }}</span><span>Profile</span></a>
+  </nav>
+  <div class="sidebar-bottom"><button class="theme-toggle" id="theme-toggle" type="button"><span>◐</span><span>Appearance</span></button><button class="nav-link logout" id="logout-button" type="button"><span class="nav-icon">↗</span><span>Log out</span></button></div>
+</aside>

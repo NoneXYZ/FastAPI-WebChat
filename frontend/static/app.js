@@ -1,63 +1,40 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const navSearch = document.getElementById('nav-search');
-    const navPending = document.getElementById('nav-pending');
-    const navMessages = document.getElementById('nav-messages');
+(() => {
+  const $ = (s, root = document) => root.querySelector(s);
+  const state = { active: null, socket: null, contacts: [], sent: new Set() };
+  const username = document.body.dataset.username;
+  const avatar = name => (name || '?').slice(0, 1).toUpperCase();
+  const escape = value => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
+  const api = async (url, options = {}) => { const response = await fetch(url, { credentials: 'same-origin', ...options }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.detail || 'Something went wrong.'); return data; };
+  const toast = (message, error = false) => { const el = document.createElement('div'); el.className = `toast${error ? ' error' : ''}`; el.textContent = message; $('#toast-region')?.append(el); setTimeout(() => el.remove(), 3500); };
+  const setTheme = () => { const html = document.documentElement; const next = html.dataset.theme === 'dark' ? 'light' : 'dark'; html.dataset.theme = next; localStorage.setItem('aether-theme', next); };
+  const loadTheme = () => { document.documentElement.dataset.theme = localStorage.getItem('aether-theme') || 'dark'; };
 
-    const searchView = document.getElementById('search-view');
-    const pendingView = document.getElementById('pending-view');
-    const messagesView = document.getElementById('messages-view');
-
-    function setActiveTab(activeNav, activeView) {
-        [navSearch, navPending, navMessages].forEach(nav => nav?.classList.remove('active'));
-        [searchView, pendingView, messagesView].forEach(view => { if (view) view.style.display = 'none'; });
-
-        if (activeNav) activeNav.classList.add('active');
-        if (activeView) activeView.style.display = 'block';
-    }
-
-    if (navSearch) {
-        navSearch.addEventListener('click', (e) => {
-            e.preventDefault();
-            setActiveTab(navSearch, searchView);
-        });
-    }
-
-    if (navPending) {
-        navPending.addEventListener('click', (e) => {
-            e.preventDefault();
-            setActiveTab(navPending, pendingView);
-        });
-    }
-
-    if (navMessages) {
-        navMessages.addEventListener('click', (e) => {
-            e.preventDefault();
-            setActiveTab(navMessages, messagesView);
-            if (window.loadMessagesInbox) {
-                window.loadMessagesInbox();
-            }
-        });
-    }
-
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            try {
-                const res = await fetch('/api/logout', {
-                    method: 'POST',
-                    credentials: 'same-origin'
-                });
-
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                    console.warn(data.detail || 'Logout request failed.');
-                }
-            } catch (err) {
-                console.warn('Logout request error:', err);
-            } finally {
-                document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                window.location.href = '/login';
-            }
-        });
-    }
-});
+  function initTheme() { loadTheme(); $('#theme-toggle')?.addEventListener('click', setTheme); }
+  function initAuth() {
+    const login = $('#loginForm'); const register = $('#registerForm');
+    const message = $('#responseMessage'); const status = (text, ok = false) => { message.textContent = text; message.className = `form-message ${ok ? 'success' : 'error'}`; };
+    login?.addEventListener('submit', async e => { e.preventDefault(); const button = $('button[type="submit"]', login); button.disabled = true; try { await api('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:$('#username').value.trim().toLowerCase(), password:$('#password').value}) }); status('Welcome back. Taking you in…', true); setTimeout(() => location.href='/', 450); } catch (err) { status(err.message); } finally { button.disabled = false; } });
+    register?.addEventListener('submit', async e => { e.preventDefault(); const name = $('#username').value.trim().toLowerCase(), pass = $('#password').value, confirm = $('#confirm_password').value; if (!/^[a-zA-Z0-9_-]{3,20}$/.test(name)) return status('Choose 3–20 letters, numbers, underscores or hyphens.'); if (pass.length < 8) return status('Password must be at least 8 characters.'); if (pass !== confirm) return status('Passwords do not match.'); const button = $('button[type="submit"]', register); button.disabled = true; try { await api('/api/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:name,password:pass}) }); status('Account created. Redirecting to log in…', true); setTimeout(() => location.href='/login', 600); } catch (err) { status(Array.isArray(err.message) ? err.message[0]?.msg : err.message); } finally { button.disabled = false; } });
+  }
+  function showView(view) { document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== view); document.querySelectorAll('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view)); if (view === 'messages') loadInbox(); if (view === 'requests') loadRequests(); if (view === 'home') loadOverview(); if (view === 'search') $('#discover-input')?.focus(); }
+  function formatTime(value) { if (!value) return ''; const date = new Date(value.replace(' ', 'T') + (value.includes('Z') ? '' : 'Z')); if (Number.isNaN(date)) return ''; return new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'}).format(date); }
+  function renderInbox() { const list = $('#conversation-list'); if (!list) return; const filter = ($('#inbox-filter')?.value || '').toLowerCase(); const rows = state.contacts.filter(c => c.username.includes(filter)); if (!rows.length) { list.innerHTML = `<div class="empty-state"><span class="empty-icon">◌</span><h3>${filter ? 'No matching conversations' : 'Your inbox is quiet'}</h3><p>${filter ? 'Try a different name.' : 'Connect with someone to start talking.'}</p></div>`; return; } list.innerHTML = rows.map(c => `<button class="conversation ${state.active?.username === c.username ? 'active':''}" data-contact="${escape(c.username)}"><div class="avatar">${avatar(c.username)}</div><i class="status-dot"></i><div class="conversation-meta"><div class="conversation-top"><strong>@${escape(c.username)}</strong><time>${formatTime(c.last_message_at)}</time></div><span class="conversation-preview">${escape(c.last_message || 'Start a conversation')}</span></div></button>`).join(''); list.querySelectorAll('[data-contact]').forEach(el => el.addEventListener('click', () => location.href = `/messages/${encodeURIComponent(el.dataset.contact)}`));
+  }
+  async function loadInbox() { const list = $('#conversation-list'); if (!username || !list) return; try { const data = await api('/api/connections/inbox'); state.contacts = data.inbox || []; renderInbox(); if (state.active && !state.contacts.some(c => c.username === state.active.username)) closeChat(); } catch (err) { list.innerHTML = '<div class="empty-state"><h3>Couldn’t load your inbox</h3><p>Please refresh and try again.</p></div>'; } }
+  async function lookup(name) { const result = await api(`/api/users/search?q=${encodeURIComponent(name)}`); return (result.results || []).find(person => person.username === name) || null; }
+  async function openChat(name) { try { const person = await lookup(name); if (!person) throw new Error('This person is no longer available.'); state.active = { username:name, id:person.id }; $('#thread-name').textContent = `@${name}`; $('#thread-avatar').textContent = avatar(name); $('#empty-thread').hidden = true; $('#thread-content').hidden = false; $('.messages-view')?.classList.add('chat-open'); renderInbox(); await loadHistory(); connectSocket(); } catch (err) { toast(err.message, true); } }
+  function closeChat() { state.active = null; state.socket?.close(); state.socket = null; $('#thread-content').hidden = true; $('#empty-thread').hidden = false; $('.messages-view')?.classList.remove('chat-open'); renderInbox(); }
+  async function loadHistory() { if (!state.active) return; const list = $('#message-list'); list.innerHTML = '<div class="skeleton-row"></div><div class="skeleton-row"></div>'; try { const data = await api(`/api/messages/${encodeURIComponent(state.active.username)}`); list.innerHTML = ''; const messages = data.messages || []; if (!messages.length) list.innerHTML = '<div class="empty-state"><span class="empty-icon">✦</span><h3>Say hello</h3><p>This is the beginning of your conversation.</p></div>'; else messages.forEach(message => appendBubble(message, message.sender === username)); list.scrollTop = list.scrollHeight; } catch (err) { list.innerHTML = '<div class="empty-state"><h3>Unable to load messages</h3></div>'; } }
+  function appendBubble(message, mine) { const list = $('#message-list'); if (!list) return; if (message.client_msg_id && list.querySelector(`[data-id="${message.client_msg_id}"]`)) return; const bubble = document.createElement('div'); bubble.className = `bubble${mine ? ' mine':''}`; if (message.client_msg_id) bubble.dataset.id = message.client_msg_id; bubble.innerHTML = `${escape(message.content)}<span class="bubble-time">${formatTime(message.timestamp)}</span>`; list.append(bubble); list.scrollTop = list.scrollHeight; }
+  function connectSocket() { if (state.socket?.readyState === WebSocket.OPEN) return; state.socket?.close(); const protocol = location.protocol === 'https:' ? 'wss' : 'ws'; const socket = state.socket = new WebSocket(`${protocol}://${location.host}/api/ws/chat`); socket.addEventListener('message', event => { try { const payload = JSON.parse(event.data); if (payload.error) return toast(payload.error, true); if (!state.active || (Number(payload.sender_id) !== Number(state.active.id) && Number(payload.receiver_id) !== Number(state.active.id))) return; const mine = payload.sender === username; if (mine && payload.client_msg_id && state.sent.has(payload.client_msg_id)) { state.sent.delete(payload.client_msg_id); return; } appendBubble(payload, mine); loadInbox(); } catch (_) {} }); socket.addEventListener('close', () => { if (state.socket === socket) state.socket = null; }); }
+  async function sendMessage(event) { event.preventDefault(); const input = $('#message-input'); const content = input.value.trim(); if (!content || !state.active) return; const client_msg_id = crypto.randomUUID(); const payload = { receiver_id: state.active.id, content, client_msg_id }; input.value = ''; appendBubble({ content, client_msg_id }, true); state.sent.add(client_msg_id); if (state.socket?.readyState === WebSocket.OPEN) { state.socket.send(JSON.stringify(payload)); } else { try { await api(`/api/messages/${encodeURIComponent(state.active.username)}`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); state.sent.delete(client_msg_id); loadInbox(); } catch (err) { toast(err.message, true); } } }
+  async function searchPeople(query) { const target = $('#discover-results'); if (!query) { target.innerHTML = '<div class="empty-state"><span class="empty-icon">⌕</span><h3>Start a search</h3><p>Find people, then send a connection request.</p></div>'; return; } target.innerHTML = '<div class="skeleton-row"></div><div class="skeleton-row"></div>'; try { const data = await api(`/api/users/search?q=${encodeURIComponent(query)}`); const users = data.results || []; if (!users.length) { target.innerHTML = '<div class="empty-state"><h3>No one found</h3><p>Try a different username.</p></div>'; return; } const items = await Promise.all(users.map(async user => ({user,status:(await api(`/api/connections/status/${encodeURIComponent(user.username)}`)).status}))); target.innerHTML = items.map(({user,status}) => `<article class="person-card"><div class="avatar">${avatar(user.username)}</div><div class="person-meta"><strong>@${escape(user.username)}</strong><span>${status === 'accepted' ? 'Connected · ready to chat' : status.replace('_',' ')}</span></div><div class="person-actions">${actionMarkup(user.username,status)}</div></article>`).join(''); target.querySelectorAll('[data-connect]').forEach(button => button.addEventListener('click', () => connectionAction(button.dataset.connect, button.dataset.mode))); } catch (err) { target.innerHTML = '<div class="empty-state"><h3>Search is unavailable</h3></div>'; } }
+  function actionMarkup(name, status) { if (status === 'accepted') return `<button class="small-button muted" data-connect="${escape(name)}" data-mode="chat">Message</button>`; if (status === 'pending_incoming') return `<button class="small-button" data-connect="${escape(name)}" data-mode="accept">Accept</button>`; if (status === 'pending_outgoing') return `<button class="small-button muted" data-connect="${escape(name)}" data-mode="cancel">Requested</button>`; return `<button class="small-button" data-connect="${escape(name)}" data-mode="connect">Connect</button>`; }
+  async function connectionAction(name, mode) { try { if (mode === 'chat') { location.href = `/messages/${encodeURIComponent(name)}`; return; } if (mode === 'accept') await api(`/api/connections/${encodeURIComponent(name)}/accept`, {method:'POST'}); else if (mode === 'cancel') await api(`/api/connections/${encodeURIComponent(name)}`, {method:'DELETE'}); else await api(`/api/connections/${encodeURIComponent(name)}`, {method:'POST'}); toast(mode === 'accept' ? `You’re connected with @${name}.` : mode === 'connect' ? `Request sent to @${name}.` : 'Request cancelled.'); if ($('#discover-input')) searchPeople($('#discover-input').value.trim()); loadInbox(); loadRequests(); } catch (err) { toast(err.message, true); } }
+  async function loadRequests() { const list = $('#request-list'); if (!list) return; list.innerHTML = '<div class="skeleton-row"></div>'; try { const data = await api('/api/connections/pending'); const rows = data.requests || []; const badge = $('#request-count'); if (badge) { badge.hidden = !rows.length; badge.textContent = rows.length; } list.innerHTML = rows.length ? rows.map(row => `<article class="person-card"><div class="avatar">${avatar(row.username)}</div><div class="person-meta"><strong>@${escape(row.username)}</strong><span>Would like to connect</span></div><div class="person-actions"><button class="small-button muted" data-decline="${escape(row.username)}">Decline</button><button class="small-button" data-accept="${escape(row.username)}">Accept</button></div></article>`).join('') : '<div class="empty-state"><span class="empty-icon">♢</span><h3>All caught up</h3><p>No connection requests right now.</p></div>'; list.querySelectorAll('[data-accept]').forEach(button => button.addEventListener('click', () => connectionAction(button.dataset.accept, 'accept'))); list.querySelectorAll('[data-decline]').forEach(button => button.addEventListener('click', () => connectionAction(button.dataset.decline, 'cancel'))); } catch (_) { list.innerHTML = '<div class="empty-state"><h3>Couldn’t load requests</h3></div>'; } }
+  async function loadOverview() { try { const data = await api('/api/connections/inbox'); $('#connection-total').textContent = data.inbox?.length || 0; $('#inbox-total').textContent = data.inbox?.filter(x => x.last_message).length || 0; } catch (_) {} }
+  async function loadRequestBadge() { const badge = $('#request-count'); if (!badge) return; try { const data = await api('/api/connections/pending'); const count = data.requests?.length || 0; badge.hidden = count === 0; badge.textContent = count; } catch (_) {} }
+  function initApp() { if (!username) return; $('#inbox-filter')?.addEventListener('input', renderInbox); $('#discover-input')?.addEventListener('input', event => { clearTimeout(state.searchTimer); state.searchTimer = setTimeout(() => searchPeople(event.target.value.trim()), 220); }); document.addEventListener('keydown', event => { if (event.key === 'Escape' && $('#discover-input')) { $('#discover-input').value = ''; searchPeople(''); } }); $('#message-form')?.addEventListener('submit', sendMessage); $('#logout-button')?.addEventListener('click', async () => { try { await api('/api/logout',{method:'POST'}); } finally { location.href='/login'; } }); if ($('#conversation-list')) { loadInbox().then(() => { const contact = document.body.dataset.activeContact; if (contact) openChat(contact); }); } if ($('#request-list')) loadRequests(); loadRequestBadge(); }
+  document.addEventListener('click', event => { const name = event.target.closest('.conversation strong, .person-card .person-meta strong'); if (name) { const profile = name.textContent.trim().replace(/^@/, ''); if (profile) { event.preventDefault(); event.stopPropagation(); location.href = `/profile/${encodeURIComponent(profile)}`; } } if (event.target.closest('#thread-name') && state.active?.username) { event.preventDefault(); location.href = `/profile/${encodeURIComponent(state.active.username)}`; } }, true);
+  document.addEventListener('DOMContentLoaded', () => { initTheme(); initAuth(); initApp(); });
+})();

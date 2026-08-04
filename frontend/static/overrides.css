@@ -1,0 +1,49 @@
+.bubble {
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.workspace,
+.messages-view,
+.inbox-pane,
+.thread-pane,
+.thread-content,
+.message-list {
+  min-height: 0;
+}
+
+.messages-view,
+.thread-pane,
+.thread-content {
+  overflow: hidden;
+}
+
+.message-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.overview-view,
+.search-view,
+.requests-view,
+.inbox-pane {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 640px) {
+  .side-nav .nav-link:nth-child(1),
+  .side-nav .nav-link:nth-child(5) {
+    display: flex;
+  }
+}
+
+.conversation strong,
+.person-card .person-meta strong,
+#thread-name {
+  cursor: pointer;
+}
+
+.profile-stat span {
+  margin-left: 0.35rem;
+}

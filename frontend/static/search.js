@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const card = document.createElement('div');
                 card.className = 'user-card';
 
-                // Fetch connection status from updated main.py
                 const statusRes = await fetch(`/api/connections/status/${encodeURIComponent(user.username)}`);
                 const statusData = await statusRes.json();
 
@@ -73,7 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function sendConnection(username, btn) {
         try {
-            // POST request to send the connection[cite: 7]
             const res = await fetch(`/api/connections/${encodeURIComponent(username)}`, { method: 'POST' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
@@ -83,11 +81,9 @@ async function sendConnection(username, btn) {
                 btn.style.backgroundColor = '#333';
                 btn.disabled = true;
             } else {
-                // Change UI to Pending
                 btn.textContent = 'Pending...';
                 btn.style.backgroundColor = '#666';
                 
-                // CRITICAL FIX: Reassign the click event so the next click Cancels it
                 btn.onclick = () => removeConnection(username, btn);
             }
         } catch (err) {
@@ -111,16 +107,13 @@ async function sendConnection(username, btn) {
 
     async function removeConnection(username, btn) {
         try {
-            // DELETE request to remove the connection/pending request[cite: 7]
             const res = await fetch(`/api/connections/${encodeURIComponent(username)}`, { method: 'DELETE' });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail);
 
-            // Revert UI back to Connect
             btn.textContent = 'Connect';
             btn.style.backgroundColor = '#4CAF50';
             
-            // CRITICAL FIX: Reassign the click event so the next click Sends it again
             btn.onclick = () => sendConnection(username, btn);
         } catch (err) {
             alert(err.message || 'Failed to cancel request.');

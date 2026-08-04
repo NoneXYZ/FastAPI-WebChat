@@ -1,5 +1,5 @@
 import aiosqlite
-from fastapi import APIRouter, Request, HTTPException, status, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -31,7 +31,7 @@ async def root_page(request: Request):
             username = payload.get("username")
             
             async with aiosqlite.connect(DB_FILE_NAME) as db:
-                db.row_factory = aiosqlite.Row # Enables column string lookups
+                db.row_factory = aiosqlite.Row
                 async with db.execute("SELECT id FROM users WHERE username = ?", (username,)) as cursor:
                     user_row = await cursor.fetchone()
             
@@ -63,14 +63,21 @@ async def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
 @router.get("/search", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
-async def chat_page(request: Request, current_user: dict = Depends(require_auth)):
-    return templates.TemplateResponse(request=request, name="search.html")
+async def search_page(request: Request, current_user: dict = Depends(require_auth)):
+    return templates.TemplateResponse(request=request, name="search.html", context={"username": current_user["sub"], "current_page": "search"})
 
+@router.get("/notifications", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+async def notifications_page(request: Request, current_user: dict = Depends(require_auth)):
+    return templates.TemplateResponse(request=request, name="notifications.html", context={"username": current_user["sub"], "current_page": "notifications"})
+
+@router.get("/messages", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 @router.get("/inbox", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
-async def inbox_page(request: Request, current_user: dict = Depends(require_auth)):
-    return templates.TemplateResponse(request=request, name="inbox.html")
+async def messages_page(request: Request, current_user: dict = Depends(require_auth)):
+    return templates.TemplateResponse(request=request, name="messages.html", context={"username": current_user["sub"], "current_page": "messages", "active_contact": None})
 
-# ...
+@router.get("/messages/{target_username}", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+async def message_thread_page(target_username: str, request: Request, current_user: dict = Depends(require_auth)):
+    return templates.TemplateResponse(request=request, name="messages.html", context={"username": current_user["sub"], "current_page": "messages", "active_contact": target_username})
 
 @router.get("/profile/{username}", response_class=HTMLResponse)
 async def user_profile_page(username: str, request: Request):
@@ -121,12 +128,14 @@ async def user_profile_page(username: str, request: Request):
         context={
             "request": request,
             "id": viewer_id,
+            "username": viewer_name,
+            "current_page": "profile",
             "viewer_name": viewer_name,
             "profile_user": {
                 "username": profile_user["username"],
                 "created_at": profile_user["created_at"],
             },
-            "relationship": relationship, # Can be: "self", "none", "connected", "pending_outgoing", "pending_incoming"
+            "relationship": relationship,
             "connection_count": connection_count["total"] if connection_count else 0,
         }
     )

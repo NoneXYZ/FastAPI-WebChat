@@ -1,4 +1,3 @@
-// Validation regex rules
 const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,20}$/;
 const PASSWORD_REGEX = /^.{8,64}$/;
 
@@ -17,7 +16,6 @@ function validateForm(username, password, confirmPassword) {
         return false;
     }
 
-    // New check for the confirm password field
     if (password !== confirmPassword) {
         errorDisplay.style.color = "#f44336";
         errorDisplay.textContent = "Passwords do not match.";
@@ -27,27 +25,21 @@ function validateForm(username, password, confirmPassword) {
     return true;
 }
 
-// Wait for the HTML to load, then attach the event listener
 document.addEventListener("DOMContentLoaded", () => {
-    // Grab the form using the ID from your HTML
     const registerForm = document.getElementById("registerForm");
 
     if (registerForm) {
         registerForm.addEventListener("submit", async (event) => {
-            // 1. Stop the browser from doing the default GET request page reload
             event.preventDefault();
 
-            // 2. Safely grab the inputs
             const username = document.getElementById("username").value.trim().toLowerCase();
             const password = document.getElementById("password").value;
             const confirmPassword = document.getElementById("confirm_password").value;
 
-            // 3. Run client-side check first
             if (!validateForm(username, password, confirmPassword)) {
                 return; // Stop execution if invalid
             }
 
-            // 4. Proceed to submit POST request to API
             try {
                 const response = await fetch("/api/register", {
                     method: "POST",

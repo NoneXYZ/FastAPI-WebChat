@@ -5,7 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Normalize directly on pull
             const username = document.getElementById('username').value.trim().toLowerCase();
             const password = document.getElementById('password').value;
             const responseMessage = document.getElementById('responseMessage');
