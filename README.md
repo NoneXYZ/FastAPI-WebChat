@@ -43,14 +43,19 @@ LocalChat is a private, connection-based web chat application. Users can find pe
 
 4. Configure `.env` with a secure `JWT_SECRET_KEY`. You can also set `APP_NAME`, `PORT`, and `DB_FILE_NAME`.
 
-5. Start the application.
+5. Start the application by running run.py or run app.main using uvicorn.
 
    ```bash
-   uvicorn app.main:app --reload
+   python run.py
+   ```
+   or
+   ```bash
+   uvicorn app.main:app --port 8000 --reload
    ```
 
-6. Open `http://127.0.0.1:8000`.
+7. Open `http://127.0.0.1:8000`.
 
+You can change the port and app name in frontend and also the db file name and much more in .env
 The database is created automatically at the path configured by `DB_FILE_NAME` when the app starts.
 
 ## Credits
