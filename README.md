@@ -56,6 +56,7 @@ LocalChat is a private, connection-based web chat application. Users can find pe
 7. Open `http://127.0.0.1:8000`.
 
 You can change the port and app name in frontend and also the db file name and much more in .env
+
 The database is created automatically at the path configured by `DB_FILE_NAME` when the app starts.
 
 ## Credits
