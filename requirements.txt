@@ -8,3 +8,4 @@ aiosqlite
 PyJWT
 websockets
 python-multipart
+python-dotenv
