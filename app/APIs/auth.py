@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 
-from app.database import DB_FILE
+from app.core.security import DB_FILE_NAME
 from app.models import UserCredentials
 from app.core.security import create_access_token, require_auth, COOKIE_NAME, ACCESS_TOKEN_EXPIRE_DAYS
 
@@ -16,7 +16,7 @@ def get_password_hash(password: str) -> str:
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserCredentials):
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         async with db.execute("SELECT id FROM users WHERE username = ?", (user.username,)) as cursor:
             if await cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Username Already Registered")
@@ -29,7 +29,7 @@ async def register_user(user: UserCredentials):
 
 @router.post("/login")
 async def login_user(credentials: UserCredentials):
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
         async with db.execute("SELECT id, username, hashed_password FROM users WHERE username = ?", (credentials.username,)) as cursor:

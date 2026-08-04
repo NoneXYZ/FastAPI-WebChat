@@ -2,7 +2,8 @@ import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.templating import Jinja2Templates
 
-from app.database import DB_FILE, get_user_id
+from app.database import get_user_id
+from app.core.security import DB_FILE_NAME
 from app.core.security import require_auth
 from app.models import MessageCreate
 
@@ -12,22 +13,27 @@ router = APIRouter(tags=["Messages"])
 @router.post("/messages/{target_username}")
 async def send_message(target_username: str, message: MessageCreate, current_user: dict = Depends(require_auth)):
     """Saves a message only if the users have an accepted connection."""
-    
+
     if not message.clean_content:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Message cannot be empty"
         )
 
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
         my_id = await get_user_id(db, current_user["sub"])
-        target_id = await get_user_id(db, target_username)
-
-        if not target_id or not my_id:
+        if my_id is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, 
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User session is invalid or account no longer exists."
+            )
+
+        target_id = await get_user_id(db, target_username)
+        if target_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
 
@@ -37,10 +43,10 @@ async def send_message(target_username: str, message: MessageCreate, current_use
                OR (requester_id = ? AND receiver_id = ?)
         """, (my_id, target_id, target_id, my_id)) as cursor:
             connection = await cursor.fetchone()
-            
+
         if not connection or connection["status"] != "accepted":
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only message accepted connections."
             )
 
@@ -55,7 +61,7 @@ async def send_message(target_username: str, message: MessageCreate, current_use
 
 @router.get("/messages/{target_username}")
 async def get_messages(target_username: str, current_user: dict = Depends(require_auth)):
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
         my_id = await get_user_id(db, current_user["sub"])

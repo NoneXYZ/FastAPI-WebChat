@@ -3,9 +3,8 @@ import inspect
 import aiosqlite
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
-from app.database import DB_FILE
 from app.models import MessageCreate
-from app.core.security import COOKIE_NAME, decode_jwt
+from app.core.security import COOKIE_NAME, decode_jwt, DB_FILE_NAME
 from app.websockets.managers import ChatConnectionManager
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
@@ -27,8 +26,7 @@ async def websocket_chat(websocket: WebSocket):
     my_id = int(user_payload["id"])
     current_username = user_payload.get("sub") or user_payload.get("username")
 
-    # 2. Initial validation check to make sure the user still exists
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT id FROM users WHERE id = ?", (my_id,)) as cursor:
             me = await cursor.fetchone()
@@ -36,17 +34,14 @@ async def websocket_chat(websocket: WebSocket):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-    # 3. Register with Connection Manager using ID
     await manager.connect(my_id, websocket)
     
     try:
         while True:
-            # 4. Receive data
             data = await websocket.receive_text()
             
             try:
                 payload = json.loads(data)
-                # Client should pass target_id directly instead of username for performance
                 target_id_raw = payload.get("receiver_id")
                 try:
                     target_id = int(target_id_raw)
@@ -59,17 +54,14 @@ async def websocket_chat(websocket: WebSocket):
                 await websocket.send_json({"error": "Missing receiver_id"})
                 continue
             
-            # 5. Parse and validate the message body using your Pydantic BaseModel
             try:
-                # This automatically validates min_length/max_length and formatting
                 message_data = MessageCreate(**payload)
             except ValidationError as e:
                 # Sends clear, structured error logs back to the client UI
                 await websocket.send_json({"error": "Validation failed", "details": e.errors()})
                 continue
             
-            # 6. Open short DB transaction per message
-            async with aiosqlite.connect(DB_FILE) as db:
+            async with aiosqlite.connect(DB_FILE_NAME) as db:
                 db.row_factory = aiosqlite.Row
                 
                 # Check if target user exists
@@ -79,7 +71,6 @@ async def websocket_chat(websocket: WebSocket):
                     await websocket.send_json({"error": "User not found"})
                     continue
                 
-                # Verify friendship status using fast indexed numeric comparisons
                 async with db.execute("""
                     SELECT status FROM connections
                     WHERE (requester_id = ? AND receiver_id = ?)
@@ -91,14 +82,12 @@ async def websocket_chat(websocket: WebSocket):
                     await websocket.send_json({"error": "You are not friends with this user"})
                     continue
                 
-                # 7. Save message using clean validated property
                 await db.execute(
                     "INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
                     (my_id, target_id, message_data.clean_content)
                 )
                 await db.commit()
             
-            # 8. Broadcast via manager using User IDs
             message_out = {
                 "sender_id": my_id,
                 "receiver_id": target_id,
@@ -117,7 +106,6 @@ async def websocket_chat(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        # Guaranteed cleanup regardless of error type
         res = manager.disconnect(my_id, websocket)
         if inspect.isawaitable(res):
             await res

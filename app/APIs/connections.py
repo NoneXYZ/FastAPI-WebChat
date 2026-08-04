@@ -2,7 +2,7 @@ import aiosqlite
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.templating import Jinja2Templates
 
-from app.database import DB_FILE
+from app.core.security import DB_FILE_NAME
 from app.core.security import require_auth
 
 templates = Jinja2Templates(directory="templates")
@@ -11,68 +11,71 @@ router = APIRouter(tags=["Connections"])
 @router.get("/connections/status/{target_username}")
 async def get_connection_status(target_username: str, current_user: dict = Depends(require_auth)):
     """Helper to tell the frontend exactly what relationship the two users have."""
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],))
-        me = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],)) as cursor:
+            me = await cursor.fetchone()
+        if not me:
+            raise HTTPException(status_code=401, detail="User session is invalid or account no longer exists.")
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (target_username,))
-        target = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (target_username,)) as cursor:
+            target = await cursor.fetchone()
 
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
         if me["id"] == target["id"]:
             return {"status": "self"}
 
-        cursor = await db.execute("""
+        async with db.execute("""
             SELECT requester_id, status FROM connections
             WHERE (requester_id = ? AND receiver_id = ?)
                OR (requester_id = ? AND receiver_id = ?)
-        """, (me["id"], target["id"], target["id"], me["id"]))
-        conn = await cursor.fetchone()
+        """, (me["id"], target["id"], target["id"], me["id"])) as cursor:
+            conn = await cursor.fetchone()
 
         if not conn:
             return {"status": "none"}
         if conn["status"] == "accepted":
             return {"status": "accepted"}
         if conn["requester_id"] == me["id"]:
-            return {"status": "pending_outgoing"} # You sent request to them
-        
-        return {"status": "pending_incoming"} # They sent request to you
+            return {"status": "pending_outgoing"}
+
+        return {"status": "pending_incoming"}
 
 
 @router.post("/connections/{target_username}")
 async def send_connection_request(target_username: str, current_user: dict = Depends(require_auth)):
     """Send a connection request. Auto-accepts if they already sent one to you."""
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],))
-        me = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],)) as cursor:
+            me = await cursor.fetchone()
+        if not me:
+            raise HTTPException(status_code=401, detail="User session is invalid or account no longer exists.")
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (target_username,))
-        target = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (target_username,)) as cursor:
+            target = await cursor.fetchone()
 
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
         if me["id"] == target["id"]:
             raise HTTPException(status_code=400, detail="You cannot connect with yourself")
 
-        cursor = await db.execute("""
+        async with db.execute("""
             SELECT id, requester_id, status FROM connections
             WHERE (requester_id = ? AND receiver_id = ?)
                OR (requester_id = ? AND receiver_id = ?)
-        """, (me["id"], target["id"], target["id"], me["id"]))
-        existing = await cursor.fetchone()
+        """, (me["id"], target["id"], target["id"], me["id"])) as cursor:
+            existing = await cursor.fetchone()
 
         if existing:
             if existing["status"] == "accepted":
                 return {"message": "You are already connected.", "status": "accepted"}
             if existing["requester_id"] == me["id"]:
                 return {"message": "Connection request already pending.", "status": "pending_outgoing"}
-            
-            # If they already sent us a request, smart-accept it instead of crashing
+
             await db.execute("UPDATE connections SET status = 'accepted' WHERE id = ?", (existing["id"],))
             await db.commit()
             return {"message": "Connection established!", "status": "accepted"}
@@ -89,24 +92,25 @@ async def send_connection_request(target_username: str, current_user: dict = Dep
 @router.post("/connections/{target_username}/accept")
 async def accept_connection(target_username: str, current_user: dict = Depends(require_auth)):
     """Accept an incoming connection request."""
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],))
-        me = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],)) as cursor:
+            me = await cursor.fetchone()
+        if not me:
+            raise HTTPException(status_code=401, detail="User session is invalid or account no longer exists.")
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (target_username,))
-        target = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (target_username,)) as cursor:
+            target = await cursor.fetchone()
 
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Ensure we are the receiver of this pending request
-        cursor = await db.execute("""
+        async with db.execute("""
             SELECT id FROM connections
             WHERE requester_id = ? AND receiver_id = ? AND status = 'pending'
-        """, (target["id"], me["id"]))
-        request_row = await cursor.fetchone()
+        """, (target["id"], me["id"])) as cursor:
+            request_row = await cursor.fetchone()
 
         if not request_row:
             raise HTTPException(status_code=404, detail="Pending request not found")
@@ -120,25 +124,26 @@ async def accept_connection(target_username: str, current_user: dict = Depends(r
 @router.delete("/connections/{target_username}")
 async def handle_connection_removal(target_username: str, current_user: dict = Depends(require_auth)):
     """A master route to Refuse (incoming), Undo (outgoing), or Unfriend (accepted)."""
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],))
-        me = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],)) as cursor:
+            me = await cursor.fetchone()
+        if not me:
+            raise HTTPException(status_code=401, detail="User session is invalid or account no longer exists.")
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (target_username,))
-        target = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (target_username,)) as cursor:
+            target = await cursor.fetchone()
 
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Safely delete any connection link between these two users regardless of state
         await db.execute("""
             DELETE FROM connections
             WHERE (requester_id = ? AND receiver_id = ?)
                OR (requester_id = ? AND receiver_id = ?)
         """, (me["id"], target["id"], target["id"], me["id"]))
-        
+
         await db.commit()
 
     return {"message": "Connection removed or request canceled.", "status": "none"}
@@ -147,19 +152,21 @@ async def handle_connection_removal(target_username: str, current_user: dict = D
 @router.get("/connections/pending")
 async def get_pending_requests(current_user: dict = Depends(require_auth)):
     """Fetch all incoming connection requests for the logged-in user."""
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],))
-        me = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],)) as cursor:
+            me = await cursor.fetchone()
+        if not me:
+            raise HTTPException(status_code=401, detail="User session is invalid or account no longer exists.")
 
-        cursor = await db.execute("""
+        async with db.execute("""
             SELECT u.username as requester_username, c.created_at
             FROM connections c
             JOIN users u ON c.requester_id = u.id
             WHERE c.receiver_id = ? AND c.status = 'pending'
-        """, (me["id"],))
-        requests = await cursor.fetchall()
+        """, (me["id"],)) as cursor:
+            requests = await cursor.fetchall()
 
     return {
         "requests": [{"username": r["requester_username"], "date": r["created_at"]} for r in requests]
@@ -169,38 +176,40 @@ async def get_pending_requests(current_user: dict = Depends(require_auth)):
 @router.get("/connections/inbox")
 async def get_inbox(current_user: dict = Depends(require_auth)):
     """Get active chats/connections and their last messages."""
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        cursor = await db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],))
-        me = await cursor.fetchone()
+        async with db.execute("SELECT id FROM users WHERE username = ?", (current_user["sub"],)) as cursor:
+            me = await cursor.fetchone()
         if not me:
-            raise HTTPException(status_code=401, detail="User is no longer available")
+            raise HTTPException(status_code=401, detail="User session is invalid or account no longer exists.")
 
-        cursor = await db.execute("""
+        async with db.execute("""
             SELECT CASE WHEN c.requester_id = ? THEN c.receiver_id ELSE c.requester_id END AS contact_id
             FROM connections c
             WHERE c.status = 'accepted'
               AND (c.requester_id = ? OR c.receiver_id = ?)
-        """, (me["id"], me["id"], me["id"]))
-        accepted_rows = await cursor.fetchall()
+        """, (me["id"], me["id"], me["id"])) as cursor:
+            accepted_rows = await cursor.fetchall()
 
         inbox = []
         for row in accepted_rows:
             contact_id = row["contact_id"]
 
-            contact = await db.execute("SELECT username FROM users WHERE id = ?", (contact_id,))
-            contact_user = await contact.fetchone()
+            async with db.execute("SELECT username FROM users WHERE id = ?", (contact_id,)) as contact_cursor:
+                contact_user = await contact_cursor.fetchone()
+            if not contact_user:
+                continue
 
-            last_message = await db.execute("""
+            async with db.execute("""
                 SELECT sender_id, content, timestamp
                 FROM messages
                 WHERE (sender_id = ? AND receiver_id = ?)
                    OR (sender_id = ? AND receiver_id = ?)
                 ORDER BY timestamp DESC
                 LIMIT 1
-            """, (me["id"], contact_id, contact_id, me["id"]))
-            last_row = await last_message.fetchone()
+            """, (me["id"], contact_id, contact_id, me["id"])) as message_cursor:
+                last_row = await message_cursor.fetchone()
 
             inbox.append({
                 "username": contact_user["username"],

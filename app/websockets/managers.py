@@ -4,7 +4,6 @@ import json
 
 class ChatConnectionManager:
     def __init__(self):
-        # Maps user_id -> list of active WebSocket connections
         self.active_connections: Dict[int, List[WebSocket]] = {}
 
     async def connect(self, user_id: int, websocket: WebSocket):

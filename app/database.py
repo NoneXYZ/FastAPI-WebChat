@@ -1,13 +1,9 @@
 import aiosqlite
-
-DB_FILE = "webchat.db"
+from app.core.security import DB_FILE_NAME
 
 async def init_db():
-    async with aiosqlite.connect(DB_FILE) as db:
-        # 1. Enable WAL mode for high-concurrency async read/write
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         await db.execute("PRAGMA journal_mode=WAL;")
-        
-        # 2. Force SQLite to actually enforce Foreign Key constraints
         await db.execute("PRAGMA foreign_keys = ON;")
 
         # Users Table
@@ -19,12 +15,6 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
-        # Migration check for existing databases
-        cursor = await db.execute("PRAGMA table_info(users)")
-        user_columns = await cursor.fetchall()
-        if not any(col[1] == 'created_at' for col in user_columns):
-            await db.execute("ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
         # Connections Table
         await db.execute("""
@@ -54,7 +44,6 @@ async def init_db():
             )
         """)
 
-        # 3. Add Indexes for fast WebSocket & REST message lookups
         await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, receiver_id);")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_connections_users ON connections(requester_id, receiver_id);")
 

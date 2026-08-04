@@ -1,29 +1,22 @@
 from datetime import datetime, timedelta, timezone
-import os
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import HTTPException, Request, status
+import aiosqlite
 import jwt
+import os
 
 current_file = Path(__file__).resolve()
 base_dir = current_file.parent.parent.parent
 env_path = base_dir / ".env"
 load_dotenv(dotenv_path=env_path)
 
-COOKIE_NAME = os.getenv("COOKIE_NAME", "access_token")
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
+COOKIE_NAME = os.getenv("COOKIE_NAME")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRES_IN"))
+DB_FILE_NAME = os.getenv("DB_FILE_NAME")
+PORT = int(os.getenv("PORT", 8000))
 ALGORITHM = "HS256"
-
-
-def _get_access_token_expire_days() -> int:
-    raw_value = os.getenv("JWT_EXPIRES_IN", "7")
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError):
-        return 7
-
-
-ACCESS_TOKEN_EXPIRE_DAYS = _get_access_token_expire_days()
 
 
 def create_access_token(data: dict) -> str:
@@ -51,25 +44,49 @@ def decode_jwt(token: str) -> dict | None:
         return None
 
 
-def require_auth(request: Request) -> dict:
+async def require_auth(request: Request) -> dict:
     """Guard for protected routes/APIs."""
     token = request.cookies.get(COOKIE_NAME)
     payload = decode_jwt(token)
-    
+
     if not token or not payload:
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
             headers={"Location": "/login"}
         )
+
+    username = payload.get("username")
+    if username:
+        async with aiosqlite.connect(DB_FILE_NAME) as db:
+            async with db.execute("SELECT id FROM users WHERE username = ?", (username,)) as cursor:
+                user_row = await cursor.fetchone()
+
+        if not user_row:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User session is invalid or account no longer exists."
+            )
+
     return payload
 
 
-def require_guest(request: Request) -> None:
-    """Guard for guest-only pages/APIs."""
+async def require_guest(request: Request) -> None:
+    """Guard for guest-only pages/APIs. Redirects active users to home."""
     token = request.cookies.get(COOKIE_NAME)
-    if token and decode_jwt(token):
-        raise HTTPException(
-            status_code=status.HTTP_303_SEE_OTHER,
-            headers={"Location": "/"}
-        )
+    
+    if token:
+        payload = decode_jwt(token)
+        if payload:
+            username = payload.get("username")
+            
+            async with aiosqlite.connect(DB_FILE_NAME) as db:
+                async with db.execute("SELECT 1 FROM users WHERE username = ?", (username,)) as cursor:
+                    user_exists = await cursor.fetchone()
+            
+            if user_exists:
+                raise HTTPException(
+                    status_code=status.HTTP_303_SEE_OTHER,
+                    headers={"Location": "/"}
+                )
+                
     return None

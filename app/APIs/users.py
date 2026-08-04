@@ -2,7 +2,7 @@ import aiosqlite
 from fastapi import APIRouter, Depends
 from fastapi.templating import Jinja2Templates
 
-from app.database import DB_FILE
+from app.core.security import DB_FILE_NAME
 from app.core.security import require_auth
 
 templates = Jinja2Templates(directory="templates")
@@ -13,7 +13,7 @@ async def search_users(q: str = "", current_user: dict = Depends(require_auth)):
     if not q or len(q.strip()) == 0:
         return {"results": []}
     
-    async with aiosqlite.connect(DB_FILE) as db:
+    async with aiosqlite.connect(DB_FILE_NAME) as db:
         db.row_factory = aiosqlite.Row
         
         cursor = await db.execute(
