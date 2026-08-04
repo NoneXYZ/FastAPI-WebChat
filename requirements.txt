@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+jinja2
+pwdlib[bcrypt]
+bcrypt
+pydantic[email]
+aiosqlite
+PyJWT
+websockets
