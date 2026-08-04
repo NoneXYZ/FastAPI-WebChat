@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 import re
 
 # What the user sends from the registration form
@@ -30,5 +30,22 @@ class UserCredentials(BaseModel):
             )
         return value
 
+# --- IMPROVED MODEL ---
 class MessageCreate(BaseModel):
-    content: str
+    # Field constraints enforce length validation before the code hits the database
+    content: str = Field(
+        ..., 
+        min_length=1, 
+        max_length=2000, 
+        description="The text content of the message. Cannot be empty or purely whitespace."
+    )
+    # Optional client-side ID to prevent double-posting / duplicate delivery
+    client_msg_id: str | None = Field(
+        default=None, 
+        description="Optional client-generated UUID to ensure message idempotency."
+    )
+
+    # Automatically strips leading/trailing whitespaces during validation
+    @property
+    def clean_content(self) -> str:
+        return self.content.strip()

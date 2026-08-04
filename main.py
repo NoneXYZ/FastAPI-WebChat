@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 
-from models import UserCreate, UserLogin, MessageCreate
+from models import UserCredentials, MessageCreate
 from database import DB_FILE, init_db
 from auth import create_access_token, require_guest, require_auth, decode_jwt, COOKIE_NAME
 import aiosqlite
@@ -94,7 +94,7 @@ async def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
 @guest_router.post("/api/register", status_code=status.HTTP_201_CREATED)
-async def register_user(user: UserCreate):
+async def register_user(user: UserCredentials):
     async with aiosqlite.connect(DB_FILE) as db:
         async with db.execute("SELECT id FROM users WHERE username = ?", (user.username,)) as cursor:
             if await cursor.fetchone():
@@ -107,7 +107,7 @@ async def register_user(user: UserCreate):
         return {"message": "User registered successfully!"}
 
 @guest_router.post("/api/login")
-async def login_user(credentials: UserLogin):
+async def login_user(credentials: UserCredentials):
     async with aiosqlite.connect(DB_FILE) as db:
         db.row_factory = aiosqlite.Row
 
@@ -463,7 +463,6 @@ async def send_message(target_username: str, message: MessageCreate, current_use
         await db.commit()
 
     return {"message": "Message sent!"}
-
 
 @auth_router.get("/api/messages/{target_username}")
 async def get_messages(target_username: str, current_user: dict = Depends(require_auth)):

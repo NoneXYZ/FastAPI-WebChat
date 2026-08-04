@@ -4,7 +4,13 @@ DB_FILE = "webchat.db"
 
 async def init_db():
     async with aiosqlite.connect(DB_FILE) as db:
-        # Existing Users Table
+        # 1. Enable WAL mode for high-concurrency async read/write
+        await db.execute("PRAGMA journal_mode=WAL;")
+        
+        # 2. Force SQLite to actually enforce Foreign Key constraints
+        await db.execute("PRAGMA foreign_keys = ON;")
+
+        # Users Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,12 +20,13 @@ async def init_db():
             )
         """)
 
+        # Migration check for existing databases
         cursor = await db.execute("PRAGMA table_info(users)")
         user_columns = await cursor.fetchall()
         if not any(col[1] == 'created_at' for col in user_columns):
             await db.execute("ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
-        # NEW: Connections Table
+        # Connections Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,12 +35,13 @@ async def init_db():
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(requester_id, receiver_id),
-                FOREIGN KEY (requester_id) REFERENCES users (id),
-                FOREIGN KEY (receiver_id) REFERENCES users (id)
+                CHECK(requester_id != receiver_id), -- Prevent self-requests at DB level
+                FOREIGN KEY (requester_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (receiver_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
 
-        # NEW: Messages Table
+        # Messages Table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,8 +49,19 @@ async def init_db():
                 receiver_id INTEGER NOT NULL,
                 content TEXT NOT NULL,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (sender_id) REFERENCES users (id),
-                FOREIGN KEY (receiver_id) REFERENCES users (id)
+                FOREIGN KEY (sender_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (receiver_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
+
+        # 3. Add Indexes for fast WebSocket & REST message lookups
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, receiver_id);")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_connections_users ON connections(requester_id, receiver_id);")
+
         await db.commit()
+
+async def get_user_id(db: aiosqlite.Connection, username: str) -> int | None:
+    """Helper to fetch user ID by username."""
+    async with db.execute("SELECT id FROM users WHERE username = ?", (username,)) as cursor:
+        row = await cursor.fetchone()
+        return row["id"] if row else None
