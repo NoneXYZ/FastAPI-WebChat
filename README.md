@@ -38,7 +38,7 @@ LocalChat is a private, connection-based web chat application. Users can find pe
 3. Install dependencies.
 
    ```bash
-   pip install -r requirements.txt
+   pip install .
    ```
 
 4. [OPTIONAL] Create a `.env` file in the root directory *if you want to configure things like `APP_NAME`, `JWT_SECRET_KEY`, `PORT`, and `DB_FILE_NAME`. Example: .env.example
