@@ -11,7 +11,7 @@ from app.websockets import endpoints as websocket
 from app.database import init_db
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-APP_NAME = os.getenv("APP_NAME", "AetherChat")
+APP_NAME = os.getenv("APP_NAME", "LocalChat")
 
 pages.templates.env.globals["app_name"] = APP_NAME
 
