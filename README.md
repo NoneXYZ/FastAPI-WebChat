@@ -41,7 +41,12 @@ LocalChat is a private, connection-based web chat application. Users can find pe
    pip install -r requirements.txt
    ```
 
+<<<<<<< HEAD
 4. Configure `.env` with a secure `JWT_SECRET_KEY`. You can also set `APP_NAME`, `PORT`, and `DB_FILE_NAME`.
+=======
+3. Create a `.env` file in the root directory *if you want to configure things like `APP_NAME`, `JWT_SECRET_KEY`, `PORT`, and `DB_FILE_NAME`. Example: .env.example
+*(Note: The `.env` file is git-ignored and should never be committed to version control).*
+>>>>>>> 20bc9c5 (Update config for cloud deployment and add .env instructions to README)
 
 5. Start the application by running run.py or run app.main using uvicorn.
 

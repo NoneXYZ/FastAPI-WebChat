@@ -9,15 +9,16 @@ import os
 current_file = Path(__file__).resolve()
 base_dir = current_file.parent.parent.parent
 env_path = base_dir / ".env"
-load_dotenv(dotenv_path=env_path)
 
-COOKIE_NAME = os.getenv("COOKIE_NAME")
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRES_IN"))
-DB_FILE_NAME = os.getenv("DB_FILE_NAME")
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+
+COOKIE_NAME = os.getenv("COOKIE_NAME", "my_app_cookie")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "YOUR_GENERATED_32_CHARACTER_HEX_KEY")
+ACCESS_TOKEN_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRES_IN", "7"))
+DB_FILE_NAME = os.getenv("DB_FILE_NAME", "app.db")
 PORT = int(os.getenv("PORT", 8000))
 ALGORITHM = "HS256"
-
 
 def create_access_token(data: dict) -> str:
     to_encode = dict(data)
