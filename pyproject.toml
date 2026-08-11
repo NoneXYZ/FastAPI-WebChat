@@ -1,0 +1,21 @@
+[project]
+name = "fastapi-webchat"
+version = "0.1.0"
+description = "FastAPI backend chat application"
+dependencies = [
+    "fastapi[standard]",
+    "uvicorn",
+    "jinja2",
+    "pwdlib[bcrypt]",
+    "bcrypt",
+    "pydantic[email]",
+    "aiosqlite",
+    "PyJWT",
+    "websockets",
+    "python-multipart",
+    "python-dotenv"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
