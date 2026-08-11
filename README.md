@@ -24,28 +24,34 @@ LocalChat is a private, connection-based web chat application. Users can find pe
 1. Download the repo using git or downlaod [ZIP](https://github.com/NoneXYZ/FastAPI-WebChat/archive/refs/heads/main.zip) file and extract it.
 
    ```bash
-   git clone git@github.com:NoneXYZ/FastAPI-WebChat.git
+   git clone https://github.com/NoneXYZ/FastAPI-WebChat.git
    cd FastAPI-WebChat
    ```
    
 2. Create and activate a virtual environment.
 
+   Linux :
    ```bash
    python -m venv .venv
    source .venv/bin/activate
    ```
-
-3. Install dependencies.
-
+   Windows :
    ```bash
-   pip install .
+   python -m venv .venv
+   source .venv\Scripts\activate
    ```
 
-4. [OPTIONAL] Create a `.env` file in the root directory *if you want to configure things like `APP_NAME`, `JWT_SECRET_KEY`, `PORT`, and `DB_FILE_NAME`. Example: .env.example
+4. Install dependencies.
+
+   ```bash
+   pip install -e .
+   ```
+
+5. [OPTIONAL] Create a `.env` file in the root directory *if you want to configure things like `APP_NAME`, `JWT_SECRET_KEY`, `PORT`, and `DB_FILE_NAME`. Example: .env.example
 
    *(Note: The `.env` file is git-ignored and should never be committed to version control).*
 
-5. Start the application by running run.py or run app.main using uvicorn.
+6. Start the application by running run.py or run app.main using uvicorn.
 
    ```bash
    python run.py
