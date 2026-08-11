@@ -61,4 +61,4 @@ The database is created automatically at the path configured by `DB_FILE_NAME` w
 
 ## Credits
 
-The backend was made by the project author. The frontend was made by Codex.
+The backend was made by the project author. The frontend was made by Aider.
